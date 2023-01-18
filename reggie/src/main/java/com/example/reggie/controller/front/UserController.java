@@ -8,12 +8,14 @@ import com.example.reggie.entity.User;
 import com.example.reggie.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/user")
@@ -23,8 +25,11 @@ public class UserController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private RedisTemplate redisTemplate;
+
     @PostMapping("/sendEmail")
-    public void sendEmail(HttpServletRequest request, @RequestBody User user){
+    public R<String> sendEmail(HttpServletRequest request, @RequestBody User user){
 
         String email=user.getPhone();
         log.info("发送邮件至：{}",email);
@@ -37,8 +42,14 @@ public class UserController {
         sendEmail.sendAuthCodeEmail(email,code);
 
         //将验证码和手机号存入session中
-        request.getSession().setAttribute("code",code);
-        request.getSession().setAttribute("email",email);
+//        request.getSession().setAttribute("code",code);
+//        request.getSession().setAttribute("email",email);
+
+        //将验证码和手机号存入redis中
+        redisTemplate.opsForValue().set("code",code,5,TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set("email",email,5, TimeUnit.MINUTES);
+
+        return R.success("发送邮箱成功");
     }
 
     @PostMapping("/login")
@@ -51,8 +62,12 @@ public class UserController {
         log.info("你的："+code+"--"+email);
 
         //从session获取code和email
-        String codeInSession =(String) request.getSession().getAttribute("code");
-        String emailInSession=(String) request.getSession().getAttribute("email");
+//        String codeInSession =(String) request.getSession().getAttribute("code");
+//        String emailInSession=(String) request.getSession().getAttribute("email");
+
+        //从redis中取出code和email
+        Object emailInSession =redisTemplate.opsForValue().get(email);
+        Object codeInSession= redisTemplate.opsForValue().get(code);
 
         log.info("正确的："+codeInSession+"--"+emailInSession);
 
@@ -72,6 +87,10 @@ public class UserController {
                 //保存到数据库中
                 userService.save(user2);
             }
+            //如果登录成功，删除redis中缓存的验证码
+            redisTemplate.delete(email);
+            redisTemplate.delete(email);
+
             //将该用户id存入session中
             request.getSession().setAttribute("user",user1.getId());
 
