@@ -45,9 +45,11 @@ public class UserController {
 //        request.getSession().setAttribute("code",code);
 //        request.getSession().setAttribute("email",email);
 
+        //先删除上次验证redis还存在的数据
+        redisTemplate.delete(email);
+
         //将验证码和手机号存入redis中
-        redisTemplate.opsForValue().set("code",code,5,TimeUnit.MINUTES);
-        redisTemplate.opsForValue().set("email",email,5, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set(email,code,5, TimeUnit.MINUTES);
 
         return R.success("发送邮箱成功");
     }
@@ -59,20 +61,23 @@ public class UserController {
         String email=user.getPhone();
         String code=user.getCode();
 
-        log.info("你的："+code+"--"+email);
+        log.info("你的："+code);
 
         //从session获取code和email
 //        String codeInSession =(String) request.getSession().getAttribute("code");
 //        String emailInSession=(String) request.getSession().getAttribute("email");
 
         //从redis中取出code和email
-        Object emailInSession =redisTemplate.opsForValue().get(email);
-        Object codeInSession= redisTemplate.opsForValue().get(code);
 
-        log.info("正确的："+codeInSession+"--"+emailInSession);
+        String codeInSession= (String)redisTemplate.opsForValue().get(email);
+
+        log.info("正确的："+codeInSession);
 
         //如果邮箱和密码都正确
-        if(code.equals(codeInSession) && emailInSession.equals(email)){
+        if(code.equals(codeInSession) && codeInSession!=null){
+
+            //删除redis中的缓存
+            redisTemplate.delete(email);
 
             LambdaQueryWrapper<User> queryWrapper=new LambdaQueryWrapper<>();
             queryWrapper.eq(User::getPhone,email);
